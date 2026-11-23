@@ -1,0 +1,40 @@
+# Redraws assets/waveform-*.svg from the real contribution calendar every Monday.
+# Uses only the built-in GITHUB_TOKEN: the calendar (including shared private counts) is public profile data.
+# Commits come from github-actions[bot], so they never count as personal contributions.
+name: Refresh waveform
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays, 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write          # only to commit the two regenerated SVGs
+
+concurrency:
+  group: refresh-waveform
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render waveform
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/waveform.py --login "${{ github.repository_owner }}" --out assets
+
+      - name: Validate SVGs
+        run: python3 scripts/waveform.py --check assets
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- assets; then echo "No change."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/waveform-light.svg assets/waveform-dark.svg assets/.waveform-total
+          git commit -m "chore: refresh contribution waveform"
+          git push
